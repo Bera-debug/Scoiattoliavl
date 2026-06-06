@@ -1,13 +1,31 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useTreeStore } from '../../store/useTreeStore';
 import { findById } from '../../lib/avl';
-import TreeRenderer, { SVG_W, SVG_H } from './TreeRenderer';
+import { useLang, t, T } from '../../lib/lang';
+import TreeRenderer from './TreeRenderer';
 import PanZoom from './PanZoom';
 import InterLevelModal from './InterLevelModal';
 
-// Detect touch device once
 const isTouchDevice = typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0);
 
+// ── Inline flag switcher ───────────────────────────────────────────────────────
+const FlagSwitcher: React.FC = () => {
+  const { lang, setLang } = useLang();
+  return (
+    <div style={{ display: 'flex', gap: 4 }}>
+      <button onClick={() => setLang('it')} title="Italiano"
+        style={{ background: lang === 'it' ? 'rgba(255,255,255,0.15)' : 'transparent', border: '1px solid rgba(160,140,100,0.25)', borderRadius: 5, padding: '2px 6px', cursor: 'pointer', fontSize: '0.95rem', lineHeight: 1, opacity: lang === 'it' ? 1 : 0.45 }}>
+        🇮🇹
+      </button>
+      <button onClick={() => setLang('en')} title="English"
+        style={{ background: lang === 'en' ? 'rgba(255,255,255,0.15)' : 'transparent', border: '1px solid rgba(160,140,100,0.25)', borderRadius: 5, padding: '2px 6px', cursor: 'pointer', fontSize: '0.95rem', lineHeight: 1, opacity: lang === 'en' ? 1 : 0.45 }}>
+        🇬🇧
+      </button>
+    </div>
+  );
+};
+
+// ── HanoiGame ─────────────────────────────────────────────────────────────────
 const HanoiGame: React.FC = () => {
   const {
     tree, hanoiState, selectedNodeId, validTargetIds,
@@ -15,26 +33,40 @@ const HanoiGame: React.FC = () => {
     startHanoi, selectNode, clearSelection, moveDisc, addNode, exitToMenu,
   } = useTreeStore();
 
-  const [keyInput, setKeyInput] = useState('');
-  const [addMsg,   setAddMsg]   = useState<{ text: string; ok: boolean } | null>(null);
-  const [showInfo, setShowInfo] = useState(false);
+  const { lang } = useLang();
+
+  const [keyInput, setKeyInput]     = useState('');
+  const [addMsg,   setAddMsg]       = useState<{ text: string; ok: boolean } | null>(null);
+  const [showInfo, setShowInfo]     = useState(false);
   const [showPinchHint, setShowPinchHint] = useState(false);
   const hintShownRef = useRef(false);
 
-  // Show pinch hint once per level on touch devices
+  // Misura il container per il sizing dinamico
+  const treeAreaRef = useRef<HTMLDivElement>(null);
+  const [containerSize, setContainerSize] = useState({ w: 800, h: 600 });
+
+  useEffect(() => {
+    const el = treeAreaRef.current;
+    if (!el) return;
+    const obs = new ResizeObserver(entries => {
+      const { width, height } = entries[0].contentRect;
+      if (width > 0 && height > 0) setContainerSize({ w: width, h: height });
+    });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+
+  // Pinch hint (touch only)
   useEffect(() => {
     if (!isTouchDevice || hintShownRef.current) return;
     if (!hanoiState.isActive || hanoiState.isWon) return;
     hintShownRef.current = true;
     setShowPinchHint(true);
-    const t = setTimeout(() => setShowPinchHint(false), 3500);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setShowPinchHint(false), 3500);
+    return () => clearTimeout(timer);
   }, [hanoiState.isActive, hanoiState.gameLevel]);
 
-  // Reset hint flag when level changes so it shows again
-  useEffect(() => {
-    hintShownRef.current = false;
-  }, [hanoiState.gameLevel]);
+  useEffect(() => { hintShownRef.current = false; }, [hanoiState.gameLevel]);
 
   const handleNodeClick = (nodeId: string) => {
     if (!hanoiState.isActive || hanoiState.isWon) return;
@@ -45,17 +77,17 @@ const HanoiGame: React.FC = () => {
 
   const handleAdd = () => {
     const k = parseInt(keyInput.trim(), 10);
-    if (isNaN(k) || k < 1 || k > 9999) {
-      setAddMsg({ text: 'Chiave non valida (1–9999)', ok: false });
+    if (isNaN(k) || k < 1 || k > 200) {
+      setAddMsg({ text: t(T.addMsgInvalid, lang), ok: false });
       setTimeout(() => setAddMsg(null), 2000);
       return;
     }
     const res = addNode(k);
     if (res.success) {
-      setAddMsg({ text: `Nodo ${k} aggiunto — osserva il ribilanciamento!`, ok: true });
+      setAddMsg({ text: t(T.addMsgOk, lang)(k), ok: true });
       setKeyInput('');
     } else {
-      setAddMsg({ text: res.reason === 'exists' ? `Nodo ${k} già presente` : 'Errore', ok: false });
+      setAddMsg({ text: res.reason === 'exists' ? t(T.addMsgExists, lang)(k) : t(T.addMsgError, lang), ok: false });
     }
     setTimeout(() => setAddMsg(null), 2500);
   };
@@ -64,184 +96,169 @@ const HanoiGame: React.FC = () => {
   const topDisc      = selectedNode?.discs[selectedNode.discs.length - 1] ?? null;
 
   const statusText = hanoiState.isWon
-    ? '🎉 Tutti gli scoiattoli a terra!'
+    ? t(T.statusWon, lang)
     : topDisc
-    ? `🐿️ Scoiattolo #${topDisc} selezionato — scegli ramo destinazione`
-    : '🌳 Clicca un nodo con scoiattoli per selezionarlo';
-
-  // Compute initial scale to fit SVG in viewport
-  const initScale = typeof window !== 'undefined'
-    ? Math.min(1, (window.innerWidth) / SVG_W, (window.innerHeight - 110) / SVG_H)
-    : 0.8;
+    ? t(T.statusSel, lang)(topDisc)
+    : t(T.statusIdle, lang);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#0D1F06', fontFamily: 'Georgia, serif' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', background: '#C8BCA8', fontFamily: 'Georgia, serif' }}>
 
-      {/* ── header ── */}
+      {/* ── Header ── */}
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '8px 14px',
-        background: 'rgba(0,0,0,0.4)',
-        borderBottom: '1px solid rgba(120,180,60,0.2)',
+        padding: '7px 14px',
+        background: 'rgba(44,34,20,0.90)',
+        borderBottom: '1px solid rgba(160,140,100,0.28)',
         flexShrink: 0, gap: 8, flexWrap: 'wrap',
       }}>
+        {/* Left: title */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: '1.3rem' }}>🌳</span>
-          <span style={{ fontSize: '1rem', color: '#F0E8C0', fontStyle: 'italic' }}>AVL Hanoi</span>
+          <span style={{ fontSize: '1.1rem' }}>🌳</span>
+          <span style={{ fontSize: '0.88rem', color: '#D4C8A8', fontStyle: 'italic', letterSpacing: '0.04em' }}>
+            {t(T.gameTitle, lang)}
+          </span>
         </div>
 
-        {/* status badge */}
+        {/* Center: status */}
         <div style={{
-          flex: 1, minWidth: 160, textAlign: 'center',
-          background: 'rgba(0,30,0,0.6)',
-          border: '1px solid rgba(100,180,50,0.25)',
-          borderRadius: 16, padding: '4px 12px',
-          color: topDisc ? '#FFE060' : '#90C870', fontSize: '0.78rem',
+          flex: 1, minWidth: 140, textAlign: 'center',
+          background: 'rgba(20,14,6,0.50)',
+          border: '1px solid rgba(160,140,100,0.20)',
+          borderRadius: 12, padding: '3px 10px',
+          color: topDisc ? '#D4B870' : '#A89878', fontSize: '0.73rem',
+          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
         }}>
           {statusText}
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ color: '#80B060', fontSize: '0.78rem' }}>
-            <strong style={{ color: '#F0E8C0' }}>L{hanoiState.gameLevel}</strong>
-            {' '}·{' '}
-            <strong style={{ color: '#F0E8C0' }}>{moveCount}</strong> mosse
+        {/* Right: controls */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <FlagSwitcher />
+          <span style={{ color: '#9A8A6A', fontSize: '0.73rem' }}>
+            <strong style={{ color: '#D4C8A8' }}>L{hanoiState.gameLevel}</strong>
+            {' · '}
+            <strong style={{ color: '#D4C8A8' }}>{moveCount}</strong>
+            {' '}{t(T.moves, lang)}
           </span>
           <button onClick={() => startHanoi(hanoiState.gameLevel)}
-            style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(120,180,60,0.3)', color: '#90C870', padding: '4px 10px', borderRadius: 5, cursor: 'pointer', fontSize: '0.75rem' }}>
+            style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(160,140,100,0.25)', color: '#C4B890', padding: '3px 9px', borderRadius: 5, cursor: 'pointer', fontSize: '0.72rem' }}>
             ↺
           </button>
           <button onClick={exitToMenu}
-            style={{ background: 'transparent', border: '1px solid rgba(120,180,60,0.2)', color: '#60A040', padding: '4px 10px', borderRadius: 5, cursor: 'pointer', fontSize: '0.75rem' }}>
+            style={{ background: 'transparent', border: '1px solid rgba(160,140,100,0.18)', color: '#9A8A6A', padding: '3px 9px', borderRadius: 5, cursor: 'pointer', fontSize: '0.72rem' }}>
             ☰
           </button>
         </div>
       </div>
 
-      {/* ── pan/zoom tree ── */}
-      <PanZoom
-        initialScale={initScale}
-        minScale={0.15}
-        maxScale={5}
-        style={{ flex: 1, background: '#0D1F06' }}
-      >
-        <TreeRenderer
-          root={tree}
-          totalDiscs={hanoiState.totalDiscs}
-          selectedNodeId={selectedNodeId}
-          validTargetIds={validTargetIds}
-          errorNodeId={errorNodeId}
-          lastAddedNodeId={lastAddedNodeId}
-          groundedCount={groundedCount}
-          animatingDiscs={animatingDiscs}
-          onNodeClick={handleNodeClick}
-        />
-      </PanZoom>
+      {/* ── Tree area ── */}
+      <div ref={treeAreaRef} style={{ flex: 1, overflow: 'hidden', position: 'relative', minHeight: 0 }}>
+        <PanZoom
+          initialScale={1} minScale={0.15} maxScale={8}
+          style={{ width: '100%', height: '100%', background: '#C8BCA8', touchAction: 'none' }}
+        >
+          <TreeRenderer
+            root={tree}
+            totalDiscs={hanoiState.totalDiscs}
+            containerW={containerSize.w}
+            containerH={containerSize.h}
+            selectedNodeId={selectedNodeId}
+            validTargetIds={validTargetIds}
+            errorNodeId={errorNodeId}
+            lastAddedNodeId={lastAddedNodeId}
+            groundedCount={groundedCount}
+            animatingDiscs={animatingDiscs}
+            onNodeClick={handleNodeClick}
+          />
+        </PanZoom>
+      </div>
 
-      {/* ── footer controls ── */}
+      {/* ── Footer ── */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 8,
-        padding: '8px 14px',
-        background: 'rgba(0,0,0,0.4)',
-        borderTop: '1px solid rgba(120,180,60,0.2)',
+        padding: '7px 14px',
+        background: 'rgba(44,34,20,0.90)',
+        borderTop: '1px solid rgba(160,140,100,0.22)',
         flexShrink: 0, flexWrap: 'wrap',
       }}>
-        <span style={{ color: '#60A040', fontSize: '0.78rem' }}>+ Nodo:</span>
+        <span style={{ color: '#9A8A6A', fontSize: '0.74rem' }}>{t(T.addNode, lang)}:</span>
         <input
-          type="number"
-          value={keyInput}
+          type="number" value={keyInput}
           onChange={e => setKeyInput(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && handleAdd()}
-          placeholder="chiave"
+          placeholder={t(T.addPlaceholder, lang)}
           style={{
-            background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(120,180,60,0.3)',
-            borderRadius: 5, color: '#F0E8C0', padding: '4px 8px', fontSize: '0.8rem',
-            width: 90, outline: 'none',
+            background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(160,140,100,0.26)',
+            borderRadius: 5, color: '#D4C8A8', padding: '4px 8px', fontSize: '0.76rem',
+            width: 76, outline: 'none', fontFamily: 'Georgia, serif',
           }}
         />
         <button onClick={handleAdd}
           style={{
-            background: 'rgba(40,100,20,0.45)', border: '1px solid rgba(90,160,40,0.4)',
-            color: '#B8E098', padding: '5px 12px', borderRadius: 5, cursor: 'pointer', fontSize: '0.78rem',
+            background: 'rgba(100,80,40,0.32)', border: '1px solid rgba(160,140,100,0.32)',
+            color: '#C4B890', padding: '4px 12px', borderRadius: 5, cursor: 'pointer',
+            fontSize: '0.74rem', fontFamily: 'Georgia, serif',
           }}>
-          Aggiungi
+          {t(T.addBtn, lang)}
         </button>
 
         {addMsg && (
-          <span style={{ fontSize: '0.78rem', color: addMsg.ok ? '#80DD60' : '#FF8080', fontStyle: 'italic' }}>
+          <span style={{ fontSize: '0.73rem', color: addMsg.ok ? '#A0B880' : '#C08060', fontStyle: 'italic' }}>
             {addMsg.text}
           </span>
         )}
 
-        <button
-          onClick={() => setShowInfo(v => !v)}
-          style={{ marginLeft: 'auto', background: 'transparent', border: 'none', color: '#60A040', cursor: 'pointer', fontSize: '1rem' }}
-          title="Regole"
-        >
+        <button onClick={() => setShowInfo(v => !v)}
+          style={{ marginLeft: 'auto', background: 'transparent', border: 'none', color: '#9A8A6A', cursor: 'pointer', fontSize: '1rem' }}
+          title={t(T.rulesTitle, lang)}>
           ℹ️
         </button>
       </div>
 
-      {/* ── info panel ── */}
+      {/* ── Info panel ── */}
       {showInfo && (
-        <div style={{
-          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 500,
-        }}
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(44,34,20,0.62)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 500, padding: 24 }}
           onClick={() => setShowInfo(false)}>
-          <div style={{
-            background: '#1A3A0A', border: '1px solid rgba(120,200,60,0.3)',
-            borderRadius: 12, padding: '24px 28px', maxWidth: 360, color: '#C0E0A0',
-            fontSize: '0.84rem', lineHeight: 1.7,
-          }}
+          <div
+            style={{ background: '#F2EDE4', border: '1px solid rgba(139,115,85,0.20)', borderRadius: 14, padding: '28px 30px', maxWidth: 360, width: '100%', color: '#4A3828', fontSize: '0.81rem', lineHeight: 1.75, boxShadow: '0 16px 48px rgba(44,34,20,0.18)' }}
             onClick={e => e.stopPropagation()}>
-            <h3 style={{ color: '#F0E8C0', marginTop: 0 }}>Regole del gioco</h3>
-            <ul style={{ paddingLeft: 18, margin: 0 }}>
-              <li>Clicca un nodo con dischi per selezionare il disco in cima.</li>
-              <li>Clicca un nodo destinazione per spostarlo.</li>
-              <li>Non puoi mettere un disco grande su uno piccolo.</li>
-              <li>Il percorso tra nodi non deve avere dischi più piccoli del tuo.</li>
-              <li>Aggiungi nodi con la barra in basso — ma attenzione: il ribilanciamento AVL può cambiare tutto!</li>
-              <li><strong style={{ color: '#F0E8C0' }}>Obiettivo</strong>: portare tutti i dischi alla radice.</li>
+            <h3 style={{ color: '#2C2416', marginTop: 0, fontWeight: 400, fontSize: '1.05rem', letterSpacing: '0.02em', fontFamily: 'Georgia,serif' }}>
+              {t(T.rulesTitle, lang)}
+            </h3>
+            <ul style={{ paddingLeft: 18, margin: 0, color: '#6A5840' }}>
+              {T.rules.map((r, i) => (
+                <li key={i} style={i === T.rules.length - 1 ? { color: '#4A3828', fontStyle: 'italic' } : {}}>
+                  {lang === 'it' ? r.it : r.en}
+                </li>
+              ))}
             </ul>
-            <button onClick={() => setShowInfo(false)}
-              style={{ marginTop: 16, background: 'rgba(80,160,40,0.3)', border: '1px solid rgba(100,180,50,0.4)', color: '#C0E0A0', padding: '8px 20px', borderRadius: 6, cursor: 'pointer' }}>
-              Chiudi
+            <button
+              onClick={() => setShowInfo(false)}
+              style={{ marginTop: 18, background: 'rgba(139,115,85,0.10)', border: '1px solid rgba(139,115,85,0.22)', color: '#8B7355', padding: '8px 22px', borderRadius: 7, cursor: 'pointer', fontFamily: 'Georgia,serif', fontSize: '0.78rem', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+              {t(T.closeBtn, lang)}
             </button>
           </div>
         </div>
       )}
 
-      {/* Pinch-to-zoom hint for touch devices */}
+      {/* ── Pinch hint ── */}
       {showPinchHint && (
         <div style={{
-          position: 'fixed',
-          bottom: 90,
-          left: '50%',
-          transform: 'translateX(-50%)',
-          background: 'rgba(0,0,0,0.72)',
-          border: '1px solid rgba(120,200,60,0.35)',
-          borderRadius: 24,
-          padding: '10px 20px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 10,
-          zIndex: 200,
-          pointerEvents: 'none',
-          animation: 'hintFadeInOut 3.5s ease forwards',
-          whiteSpace: 'nowrap',
+          position: 'fixed', bottom: 80, left: '50%', transform: 'translateX(-50%)',
+          background: 'rgba(44,34,20,0.80)', border: '1px solid rgba(160,140,100,0.30)',
+          borderRadius: 20, padding: '9px 18px',
+          display: 'flex', alignItems: 'center', gap: 10,
+          zIndex: 200, pointerEvents: 'none',
+          animation: 'hintFade 3.5s ease forwards', whiteSpace: 'nowrap',
         }}>
-          <style>{`
-            @keyframes hintFadeInOut {
-              0%   { opacity: 0; transform: translateX(-50%) translateY(6px); }
-              15%  { opacity: 1; transform: translateX(-50%) translateY(0); }
-              75%  { opacity: 1; }
-              100% { opacity: 0; }
-            }
-          `}</style>
-          <span style={{ fontSize: '1.4rem' }}>🤏</span>
-          <span style={{ color: '#C0E8A0', fontSize: '0.85rem', fontFamily: 'Georgia, serif' }}>
-            Pizzica per zoomare · Trascina per spostarti
+          <style>{`@keyframes hintFade{0%{opacity:0;transform:translateX(-50%) translateY(6px)}15%{opacity:1;transform:translateX(-50%) translateY(0)}75%{opacity:1}100%{opacity:0}}`}</style>
+          <span style={{ fontSize: '1.3rem' }}>🤏</span>
+          <span style={{ color: '#D4C8A8', fontSize: '0.82rem', fontFamily: 'Georgia, serif' }}>
+            {lang === 'it'
+              ? 'Pizzica per zoomare · Trascina per spostarti'
+              : 'Pinch to zoom · Drag to pan'}
           </span>
         </div>
       )}

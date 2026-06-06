@@ -12,26 +12,41 @@ function treeDepth(node: AVLNode | null): number {
   return 1 + Math.max(treeDepth(node.left), treeDepth(node.right));
 }
 
-// Root at BOTTOM (large y), children spread upward (decreasing y).
-// Leaves are at the TOP of the diagram.
 export function layoutTree(
   root: AVLNode | null,
   svgW: number,
   svgH: number,
+  nodeW: number = 60,
 ): Map<string, Position> {
   const pos = new Map<string, Position>();
   if (!root) return pos;
 
-  const depth  = treeDepth(root);
-  const rootY  = svgH - 120;                                   // root near bottom
-  const leafY  = rootY - Math.max(1, depth - 1) * 220;        // leaves near top (smaller y)
-  const levelH = depth > 1 ? (leafY - rootY) / (depth - 1) : 0;
-  const padX   = 100;
+  const depth   = treeDepth(root);
+  const nodeH   = nodeW * 0.58;
+  const labelH  = nodeW * 0.27;
+  const groundH = Math.max(40, svgH * 0.07);
+  const usableH = svgH - groundH;
+
+  // Padding orizzontale: metà nodo + margine
+  const padX = Math.max(nodeW * 0.55 + 8, svgW * 0.04);
+
+  // rootY: il fondo del nodo (centro + NH/2 + labelH) deve stare sopra il terreno
+  const rootY = Math.min(
+    usableH * 0.88,
+    usableH - nodeH * 0.5 - labelH - 10,
+  );
+
+  // leafY: la cima del nodo (centro - NH/2 - emoji overhang ~0.67*NH) deve stare > 0
+  const emojiOverhang = nodeH * 0.67 + nodeW * 0.15;
+  const leafY = Math.max(emojiOverhang + 10, usableH * 0.08);
+
+  // Sicurezza: se l'albero è troppo alto per lo spazio, comprimi
+  const span   = depth > 1 ? rootY - leafY : 1;
+  const levelH = depth > 1 ? span / (depth - 1) : 0;
 
   function assign(node: AVLNode | null, d: number, xMin: number, xMax: number) {
     if (!node) return;
-    pos.set(node.id, { x: (xMin + xMax) / 2, y: rootY + d * levelH });
-
+    pos.set(node.id, { x: (xMin + xMax) / 2, y: rootY - d * levelH });
     const ls  = subtreeSize(node.left);
     const rs  = subtreeSize(node.right);
     const tot = ls + rs;

@@ -16,6 +16,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useTreeStore } from '../../store/useTreeStore';
 import { useDiaryStore } from '../../store/useDiaryStore';
+import { useLang } from '../../lib/lang';
 
 const AD_WAIT_SEC = 5; // seconds before Next Level button is active
 
@@ -62,72 +63,67 @@ const InterLevelModal: React.FC = () => {
     return () => clearInterval(t);
   }, [isWon]);
 
+  const { lang } = useLang();
+
   if (!isActive || !isWon) return null;
 
-  const duration  = Math.round((Date.now() - gameStartTime) / 1000);
-  const minutes   = Math.floor(duration / 60);
-  const seconds   = duration % 60;
-  const timeStr   = minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
+  const duration = Math.round((Date.now() - gameStartTime) / 1000);
+  const minutes  = Math.floor(duration / 60);
+  const seconds  = duration % 60;
+  const timeStr  = minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
+
+  const it = lang === 'it';
 
   return (
     <div style={{
       position: 'fixed', inset: 0,
-      background: 'rgba(0,10,0,0.82)',
+      background: 'rgba(44,34,20,0.72)',
+      backdropFilter: 'blur(5px)',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       zIndex: 1000,
       fontFamily: 'Georgia, serif',
+      padding: 24,
     }}>
       <div style={{
-        background: 'linear-gradient(160deg, #1A3A0A 0%, #2D5A18 100%)',
-        border: '1px solid rgba(140,200,80,0.35)',
-        borderRadius: 14,
-        padding: '28px 32px',
-        maxWidth: 380,
-        width: '90vw',
+        background: '#F5F0E8',
+        border: '1px solid rgba(139,115,85,0.25)',
+        borderRadius: 16,
+        padding: '32px 32px 24px',
+        maxWidth: 380, width: '100%',
         textAlign: 'center',
-        boxShadow: '0 24px 80px rgba(0,0,0,0.7)',
+        boxShadow: '0 24px 80px rgba(44,34,20,0.25)',
       }}>
-        {/* trophy + title */}
-        <div style={{ fontSize: '2.8rem', marginBottom: 6 }}>🏆🐿️</div>
-        <h2 style={{ fontSize: '1.5rem', color: '#F5E8C0', fontStyle: 'italic', margin: '0 0 4px' }}>
-          Livello {gameLevel} completato!
+        <div style={{ fontSize: '2.4rem', marginBottom: 8 }}>🏆🐿️</div>
+
+        <h2 style={{ fontSize: '1.35rem', color: '#2C2416', fontStyle: 'italic', fontWeight: 400, margin: '0 0 4px', letterSpacing: '0.02em' }}>
+          {it ? `Livello ${gameLevel} completato!` : `Level ${gameLevel} complete!`}
         </h2>
-        <p style={{ color: '#A8C890', fontSize: '0.88rem', margin: '0 0 16px' }}>
-          {totalDiscs} scoiattoli portati a terra in salvo! 🌱
+        <p style={{ color: '#7A6E5F', fontSize: '0.84rem', margin: '0 0 18px' }}>
+          {it
+            ? `${totalDiscs} scoiattoli portati a terra in salvo 🌱`
+            : `${totalDiscs} squirrels safely on the ground 🌱`}
         </p>
 
         {/* stats */}
-        <div style={{
-          display: 'flex', gap: 16, justifyContent: 'center',
-          marginBottom: 20, color: '#C8E8A0', fontSize: '0.84rem',
-        }}>
+        <div style={{ display: 'flex', gap: 20, justifyContent: 'center', marginBottom: 20, color: '#8B7355', fontSize: '0.82rem' }}>
           <span>⏱ {timeStr}</span>
-          <span>🔄 {moveCount} mosse</span>
+          <span>🔄 {moveCount} {it ? 'mosse' : 'moves'}</span>
         </div>
 
-        {/* ── AD SLOT ────────────────────────────────────────────────── */}
-        {/* Replace the content of this div with Google AdSense code:   */}
-        {/* <ins className="adsbygoogle"                                 */}
-        {/*   style={{display:'block'}}                                  */}
-        {/*   data-ad-client="ca-pub-XXXXXXXXXXXXXXXXXX"                 */}
-        {/*   data-ad-slot="XXXXXXXXXX"                                  */}
-        {/*   data-ad-format="auto" data-full-width-responsive="true">   */}
-        {/* </ins>                                                        */}
+        {/* AD SLOT — replace with AdSense ins tag */}
         <div style={{
-          width: '100%', maxWidth: 320, height: 100,
-          margin: '0 auto 20px',
-          background: 'rgba(0,0,0,0.3)',
-          border: '1px dashed rgba(140,200,80,0.3)',
+          width: '100%', maxWidth: 320, height: 90,
+          margin: '0 auto 22px',
+          background: 'rgba(139,115,85,0.06)',
+          border: '1px dashed rgba(139,115,85,0.25)',
           borderRadius: 6,
           display: 'flex', flexDirection: 'column',
           alignItems: 'center', justifyContent: 'center',
-          color: 'rgba(150,200,120,0.5)',
-          fontSize: '0.75rem',
-          gap: 4,
+          color: 'rgba(139,115,85,0.45)', fontSize: '0.72rem', gap: 3,
         }}>
-          <span style={{ fontSize: '1.2rem' }}>📢</span>
-          <span>Spazio pubblicitario</span>
-          <span style={{ fontSize: '0.68rem', opacity: 0.7 }}>300×100 banner</span>
+          <span style={{ fontSize: '1rem' }}>📢</span>
+          <span>{it ? 'Spazio pubblicitario' : 'Ad space'}</span>
+          <span style={{ fontSize: '0.65rem', opacity: 0.7 }}>300×90 banner</span>
         </div>
 
         {/* buttons */}
@@ -137,48 +133,33 @@ const InterLevelModal: React.FC = () => {
               disabled={countdown > 0}
               onClick={() => startHanoi(gameLevel + 1)}
               style={{
-                background: countdown > 0 ? 'rgba(50,100,30,0.3)' : 'rgba(60,130,30,0.5)',
-                border: '1px solid rgba(100,180,50,0.4)',
-                color: countdown > 0 ? '#7AAA60' : '#C8F080',
-                padding: '10px 20px',
-                borderRadius: 7, cursor: countdown > 0 ? 'default' : 'pointer',
-                fontSize: '0.88rem', fontWeight: 600,
-                transition: 'all 0.3s',
+                background: countdown > 0 ? 'rgba(139,115,85,0.10)' : 'rgba(139,115,85,0.18)',
+                border: '1px solid rgba(139,115,85,0.30)',
+                color: countdown > 0 ? '#A89878' : '#5A3E20',
+                padding: '10px 20px', borderRadius: 8,
+                cursor: countdown > 0 ? 'default' : 'pointer',
+                fontSize: '0.84rem', fontFamily: 'Georgia, serif',
+                transition: 'all 0.25s', letterSpacing: '0.02em',
               }}
             >
-              {countdown > 0 ? `Livello ${gameLevel + 1} (${countdown}s)` : `Livello ${gameLevel + 1} →`}
+              {countdown > 0
+                ? (it ? `Livello ${gameLevel + 1} (${countdown}s)` : `Level ${gameLevel + 1} (${countdown}s)`)
+                : (it ? `Livello ${gameLevel + 1} →` : `Level ${gameLevel + 1} →`)}
             </button>
           ) : (
-            <button
-              onClick={exitToMenu}
-              style={{
-                background: 'rgba(60,130,30,0.5)',
-                border: '1px solid rgba(100,180,50,0.4)',
-                color: '#C8F080', padding: '10px 20px',
-                borderRadius: 7, cursor: 'pointer', fontSize: '0.88rem', fontWeight: 600,
-              }}
-            >
-              🎉 Hai completato tutti i livelli!
+            <button onClick={exitToMenu}
+              style={{ background: 'rgba(139,115,85,0.18)', border: '1px solid rgba(139,115,85,0.30)', color: '#5A3E20', padding: '10px 20px', borderRadius: 8, cursor: 'pointer', fontSize: '0.84rem', fontFamily: 'Georgia, serif' }}>
+              {it ? '🎉 Tutti i livelli completati!' : '🎉 All levels complete!'}
             </button>
           )}
-
-          <button
-            onClick={() => startHanoi(gameLevel)}
-            style={{
-              background: 'rgba(255,255,255,0.06)',
-              border: '1px solid rgba(140,200,80,0.25)',
-              color: '#A0C880', padding: '10px 16px',
-              borderRadius: 7, cursor: 'pointer', fontSize: '0.82rem',
-            }}
-          >
-            ↺ Riprova
+          <button onClick={() => startHanoi(gameLevel)}
+            style={{ background: 'transparent', border: '1px solid rgba(139,115,85,0.20)', color: '#8B7355', padding: '10px 16px', borderRadius: 8, cursor: 'pointer', fontSize: '0.80rem', fontFamily: 'Georgia, serif' }}>
+            ↺ {it ? 'Riprova' : 'Retry'}
           </button>
         </div>
 
-        {/* copyright/IP notice */}
-        <p style={{ marginTop: 20, fontSize: '0.65rem', color: 'rgba(140,180,100,0.4)' }}>
-          © 2025 AVL Hanoi – Tutti i diritti riservati.<br />
-          Il software è protetto da copyright. Marchio in registrazione.
+        <p style={{ marginTop: 18, fontSize: '0.62rem', color: 'rgba(139,115,85,0.35)', letterSpacing: '0.04em' }}>
+          © 2025 AVL Hanoi · {it ? 'Tutti i diritti riservati' : 'All rights reserved'}
         </p>
       </div>
     </div>
